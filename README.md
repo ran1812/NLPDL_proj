@@ -32,7 +32,17 @@ bash get_data.sh
 
 运行预训练的代码如下：
 ```
-python run_mlm.py --model_name_or_path roberta-base --output_dir ./posttrain --data_name 
+python run_mlm.py --model_name_or_path roberta-base --output_dir ./posttrain --dataset_name pretrain 
+```
+
+运行清洗数据的预训练的代码如下：
+```
+python run_mlm.py --model_name_or_path roberta-base --output_dir ./posttrain_clean --dataset_name pretrain_clean
+```
+
+运行adapter预训练的代码如下：
+```
+python run_mlm.py --model_name_or_path roberta-base --output_dir ./posttrain_adapter --dataset_name pretrain_clean --apply_adapter
 ```
 
 
