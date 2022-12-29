@@ -1,5 +1,7 @@
 # NLPDL_project:领域特定文本
 
+这是2022年秋NLPDL课程project：领域特定文本-生物领域的代码
+
 ## Environment setup
 
 ```
