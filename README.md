@@ -32,19 +32,20 @@ bash get_data.sh
 
 将预训练数据聚合为txt的代码在get_posttrain.ipynb中，预训练数据的清洗代码在clean.ipynb中，依次执行即可。
 
+预训练共三种类型的模型，如下：
+
 运行预训练的代码如下：
 ```
 python run_mlm.py --model_name_or_path roberta-base --output_dir ./posttrain --dataset_name pretrain --per_device_train_batch_size 96 --do_train --overwrite_output_dir
 ```
 
-运行清洗数据的预训练的代码如下：
-```
-python run_mlm.py --model_name_or_path roberta-base --output_dir ./posttrain_clean --dataset_name pretrain_clean --per_device_train_batch_size 96 --do_train --overwrite_output_dir
-```
+其中 --output_dir 可选择 ./posttrain ; ./posttrain_clean ;  ./posttrain_adapter ; 其中dataset_name可选择pretrain (对应第一种output_dir) ; pretrain_clean (对应后两种output_dir)
 
-运行adapter预训练的代码如下：
+
+运行fine-tune的代码如下：
 ```
-python run_mlm.py --model_name_or_path roberta-base --output_dir ./posttrain_adapter --dataset_name pretrain_clean --apply_adapter --per_device_train_batch_size 96 --do_train --overwrite_output_dir
+python train.py --do_predict --model_name_or_path './posttrain_clean' --output_dir /tmp/ --dataset_name bioasq --do_train --overwrite_output_dir --seed 1 --num_train_epoch 4 
 ```
+其中 --dataset_name 可选择bioasq,chemprot; --output_dir可自行修改为任意输出位置，--seed可自行修改以进行多次测量，--num_train_epoch 可自行修改。
 
 
