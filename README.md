@@ -46,6 +46,6 @@ python run_mlm.py --model_name_or_path roberta-base --output_dir ./posttrain --d
 ```
 python train.py --do_predict --model_name_or_path './posttrain_clean' --output_dir /tmp/ --dataset_name bioasq --do_train --overwrite_output_dir --seed 1 --num_train_epoch 4 
 ```
-其中 --dataset_name 可选择bioasq,chemprot; --output_dir可自行修改为任意输出位置，--seed可自行修改以进行多次测量，--num_train_epoch 可自行修改。
+其中 --dataset_name 可选择bioasq,chemprot; --output_dir可自行修改为任意输出位置，--seed可自行修改以进行多次测量，我选择的是default(42),1,2,3,4进行测量，--num_train_epoch 可自行修改。
 
 
