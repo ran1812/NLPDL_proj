@@ -4,8 +4,9 @@ import torch
 from transformers import BertModel, BertConfig
 from torch import nn
 import torch.nn.functional as F
+import loralib as lora
 
-from transformers.models.roberta.modeling_roberta import RobertaModel,RobertaSelfOutput,RobertaEncoder,RobertaOutput,RobertaLayer,RobertaAttention,RobertaForSequenceClassification,RobertaForMaskedLM
+from transformers.models.roberta.modeling_roberta import RobertaSelfAttention,RobertaModel,RobertaSelfOutput,RobertaEncoder,RobertaOutput,RobertaLayer,RobertaAttention,RobertaForSequenceClassification,RobertaForMaskedLM
 from typing import List, Optional, Tuple, Union
 
 class Adapter(nn.Module):
@@ -29,30 +30,55 @@ class Adapter(nn.Module):
 class MyRobertaSelfOutput(RobertaSelfOutput):
     def __init__(self, config):
         super().__init__(config)
-        self.adapter = Adapter(config)
+        if config.apply_adapter:
+            self.adapter = Adapter(config)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.adapter(hidden_states)
+        if hasattr(self, 'adapter'):
+            hidden_states = self.adapter(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 class MyRobertaOutput(RobertaOutput):
     def __init__(self, config):
         super().__init__(config)
-        self.adapter = Adapter(config)
+        if config.apply_adapter:
+            self.adapter = Adapter(config)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.adapter(hidden_states)
+        if hasattr(self, 'adapter'):
+            hidden_states = self.adapter(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
+    
+class MyRobertaSelfAttention(RobertaSelfAttention):
+    def __init__(self, config, position_embedding_type=None):
+        super().__init__(config, position_embedding_type= position_embedding_type)
+        if config.apply_lora:
+            self.query = lora.Linear(config.hidden_size, self.all_head_size, config.lora_r, lora_alpha=config.lora_alpha)
+            self.value = lora.Linear(config.hidden_size, self.all_head_size, config.lora_r, lora_alpha=config.lora_alpha)
+        
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ):
+        return super().forward(hidden_states, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask, 
+        past_key_value, output_attentions)
 
 class MyRobertaAttention(RobertaAttention):
     def __init__(self, config, position_embedding_type=None):
         super().__init__(config, position_embedding_type= position_embedding_type)
+        self.self = MyRobertaSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = MyRobertaSelfOutput(config)
 
     def forward(
@@ -142,21 +168,34 @@ class Roberta_Net_cls(RobertaForSequenceClassification):
         super().__init__(config)
 
         self.roberta = MyRobertaModel(config)
+        if config.apply_adapter or config.apply_lora:
+            for param in self.roberta.parameters():
+                param.requires_grad = False
         
-        for param in self.roberta.parameters():
-            param.requires_grad = False
+        if config.apply_adapter:
+            adaters = \
+                [self.roberta.encoder.layer[layer_id].attention.output.adapter for layer_id in range(config.num_hidden_layers)] + \
+                [self.roberta.encoder.layer[layer_id].attention.output.LayerNorm for layer_id in range(config.num_hidden_layers)] + \
+                [self.roberta.encoder.layer[layer_id].output.adapter for layer_id in range(config.num_hidden_layers)] + \
+                [self.roberta.encoder.layer[layer_id].output.LayerNorm for layer_id in range(config.num_hidden_layers)]
 
-        adaters = \
-            [self.roberta.encoder.layer[layer_id].attention.output.adapter for layer_id in range(config.num_hidden_layers)] + \
-            [self.roberta.encoder.layer[layer_id].attention.output.LayerNorm for layer_id in range(config.num_hidden_layers)] + \
-            [self.roberta.encoder.layer[layer_id].output.adapter for layer_id in range(config.num_hidden_layers)] + \
-            [self.roberta.encoder.layer[layer_id].output.LayerNorm for layer_id in range(config.num_hidden_layers)]
+            for adapter in adaters:
+                for param in adapter.parameters():
+                    param.requires_grad = True
 
-        for adapter in adaters:
-            for param in adapter.parameters():
-                param.requires_grad = True
+            print('Roberta ADAPTER')
+            
+        if config.apply_lora:
+            paras = \
+                [self.roberta.encoder.layer[layer_id].attention.self.query for layer_id in range(config.num_hidden_layers)] + \
+                [self.roberta.encoder.layer[layer_id].attention.self.value for layer_id in range(config.num_hidden_layers)] + \
+                [self.roberta.encoder.layer[layer_id].attention.output.LayerNorm for layer_id in range(config.num_hidden_layers)]
 
-        print('Roberta ADAPTER')
+            for para in paras:
+                for param in para.parameters():
+                    param.requires_grad = True
+
+            print('Roberta Lora')
 
     def forward(
         self,
@@ -174,27 +213,43 @@ class Roberta_Net_cls(RobertaForSequenceClassification):
 
         return super().forward(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds,
         labels, output_attentions, output_hidden_states, return_dict)
-    
+
 class Roberta_Net_mlm(RobertaForMaskedLM):
     def __init__(self,config):
         super().__init__(config)
 
         self.roberta = MyRobertaModel(config)
         
-        for param in self.roberta.parameters():
-            param.requires_grad = False
+        if config.apply_adapter or config.apply_lora:
+            for param in self.roberta.parameters():
+                param.requires_grad = False
+        
+        if config.apply_adapter:
 
-        adaters = \
-            [self.roberta.encoder.layer[layer_id].attention.output.adapter for layer_id in range(config.num_hidden_layers)] + \
-            [self.roberta.encoder.layer[layer_id].attention.output.LayerNorm for layer_id in range(config.num_hidden_layers)] + \
-            [self.roberta.encoder.layer[layer_id].output.adapter for layer_id in range(config.num_hidden_layers)] + \
-            [self.roberta.encoder.layer[layer_id].output.LayerNorm for layer_id in range(config.num_hidden_layers)]
+            adaters = \
+                [self.roberta.encoder.layer[layer_id].attention.output.adapter for layer_id in range(config.num_hidden_layers)] + \
+                [self.roberta.encoder.layer[layer_id].attention.output.LayerNorm for layer_id in range(config.num_hidden_layers)] + \
+                [self.roberta.encoder.layer[layer_id].output.adapter for layer_id in range(config.num_hidden_layers)] + \
+                [self.roberta.encoder.layer[layer_id].output.LayerNorm for layer_id in range(config.num_hidden_layers)]
 
-        for adapter in adaters:
-            for param in adapter.parameters():
-                param.requires_grad = True
+            for adapter in adaters:
+                for param in adapter.parameters():
+                    param.requires_grad = True
+                    
+            print('Roberta ADAPTER')
+                    
+        if config.apply_lora:
+            paras = \
+                [self.roberta.encoder.layer[layer_id].attention.self.query for layer_id in range(config.num_hidden_layers)] + \
+                [self.roberta.encoder.layer[layer_id].attention.self.value for layer_id in range(config.num_hidden_layers)] + \
+                [self.roberta.encoder.layer[layer_id].attention.output.LayerNorm for layer_id in range(config.num_hidden_layers)]
 
-        print('Roberta ADAPTER')
+            for para in paras:
+                for param in para.parameters():
+                    param.requires_grad = True
+
+            print('Roberta Lora')
+                    
 
     def forward(
         self,

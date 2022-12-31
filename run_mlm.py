@@ -51,7 +51,7 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-from Adapter import Roberta_Net_mlm
+from Adapter import Roberta_Net_mlm 
 
 
 
@@ -117,12 +117,24 @@ class ModelArguments:
         },
     )
     adapter_size: int = field(
-        default=1000,
+        default=2000,
         metadata={"help": "adapter size"},
     )
-    adapter: bool = field(
+    apply_adapter: bool = field(
         default=False,
         metadata={"help": "adapter size"},
+    )
+    apply_lora: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Whether to apply LoRA or not."},
+    )
+    lora_alpha: Optional[int] = field(
+        default=8,
+        metadata={"help": "LoRA alpha"},
+    )
+    lora_r: Optional[int] = field(
+        default=8,
+        metadata={"help": "LoRA r"},
     )
 
     def __post_init__(self):
@@ -316,26 +328,19 @@ def main():
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
     config.adapter_size = model_args.adapter_size
+    config.apply_lora=model_args.apply_lora
+    config.lora_alpha=model_args.lora_alpha
+    config.lora_r=model_args.lora_r
+    config.apply_adapter=model_args.apply_adapter
 
-    if model_args.adapter:
-        model = Roberta_Net_mlm(config)   
-        model = model.from_pretrained(
-            model_args.model_name_or_path,
-            from_tf=bool(".ckpt" in model_args.model_name_or_path),
-            config=config,
-            cache_dir=model_args.cache_dir,
-            revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
-    else:
-        model = AutoModelForMaskedLM.from_pretrained(
-            model_args.model_name_or_path,
-            from_tf=bool(".ckpt" in model_args.model_name_or_path),
-            config=config,
-            cache_dir=model_args.cache_dir,
-            revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
+    model = Roberta_Net_mlm(config).from_pretrained(
+        model_args.model_name_or_path,
+        from_tf=bool(".ckpt" in model_args.model_name_or_path),
+        config=config,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
     embedding_size = model.get_input_embeddings().weight.shape[0]

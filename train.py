@@ -197,9 +197,21 @@ class ModelArguments:
         default=2000,
         metadata={"help": "adapter size"},
     )
-    adapter: bool = field(
+    apply_adapter: bool = field(
         default=False,
         metadata={"help": "adapter size"},
+    )
+    apply_lora: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Whether to apply LoRA or not."},
+    )
+    lora_alpha: Optional[int] = field(
+        default=8,
+        metadata={"help": "LoRA alpha"},
+    )
+    lora_r: Optional[int] = field(
+        default=8,
+        metadata={"help": "LoRA r"},
     )
 
 
@@ -254,7 +266,7 @@ def main():
             )
     training_args.save_steps = 1500
     # Set seed before initializing model.
-    #training_args.seed = 1
+    #training_args.seed = 4
     set_seed(training_args.seed)
 
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
@@ -286,6 +298,7 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
@@ -294,41 +307,35 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
     )
     config.adapter_size = model_args.adapter_size
+    config.apply_lora=model_args.apply_lora
+    config.lora_alpha=model_args.lora_alpha
+    config.lora_r=model_args.lora_r
+    config.apply_adapter=model_args.apply_adapter
 
-    if model_args.adapter:
-        '''
-        tmp = AutoModelForSequenceClassification.from_pretrained(
-            model_args.model_name_or_path,
-            from_tf=bool(".ckpt" in model_args.model_name_or_path),
-            config=config,
-            cache_dir=model_args.cache_dir,
-            revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
-            ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
-        )'''
-        
-        model = Roberta_Net_cls(config)   
-        model = model.from_pretrained(
-            model_args.model_name_or_path,
-            from_tf=bool(".ckpt" in model_args.model_name_or_path),
-            config=config,
-            cache_dir=model_args.cache_dir,
-            revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
-            ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
-        )
-        #model.classifier.dense.weight = tmp.classifier.dense.weight
-        #model.classifier.out_proj.weight = tmp.classifier.out_proj.weight
-    else:
-        model = AutoModelForSequenceClassification.from_pretrained(
-            model_args.model_name_or_path,
-            from_tf=bool(".ckpt" in model_args.model_name_or_path),
-            config=config,
-            cache_dir=model_args.cache_dir,
-            revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
-            ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
-        )
+    print(config)
+    
+    '''
+    tmp = AutoModelForSequenceClassification.from_pretrained(
+        model_args.model_name_or_path,
+        from_tf=bool(".ckpt" in model_args.model_name_or_path),
+        config=config,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
+        ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
+    )'''
+    ''''''
+    model = Roberta_Net_cls(config).from_pretrained(
+        model_args.model_name_or_path,
+        from_tf=bool(".ckpt" in model_args.model_name_or_path),
+        config=config,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
+        ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
+    )
+    #model.classifier.dense.weight = tmp.classifier.dense.weight
+    #model.classifier.out_proj.weight = tmp.classifier.out_proj.weight
 
     # Preprocessing the raw_datasets
     non_label_column_names = [name for name in raw_datasets["train"].column_names if name != "label"]
